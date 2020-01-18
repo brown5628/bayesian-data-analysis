@@ -118,3 +118,5 @@ plt.tight_layout()
 plt.show()
 
 # %%
+np.random.seed(1)
+az.plot_posterior({'θ':stats.beta.rvs(5, 11, size=1000)})
