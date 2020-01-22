@@ -201,3 +201,70 @@ with pm.Model() as model_h:
 az.plot_trace(trace_h) 
 
 # %%
+merp = az.summary(trace_h)
+print(merp)
+
+# %%
+x = np.linspace(0, 1, 100)
+for i in np.random.randint(0, len(trace_h), size=100):
+    u = trace_h['μ'][i]
+    k = trace_h['κ'][i]
+    pdf = stats.beta(u*k, (1.0-u)*k).pdf(x)
+    plt.plot(x, pdf,  'C1', alpha=0.2)
+u_mean = trace_h['μ'].mean()
+k_mean = trace_h['κ'].mean()
+dist = stats.beta(u_mean*k_mean, (1.0-u_mean)*k_mean)
+pdf = dist.pdf(x)
+mode = x[np.argmax(pdf)]
+mean = dist.moment(1)
+plt.plot(x, pdf, lw=3, label=f'mode = {mode:.2f}\nmean = {mean:.2f}')
+plt.yticks([])
+
+plt.legend()
+plt.xlabel('$θ_{prior}$')
+plt.tight_layout()
+plt.show()
+
+
+# %%
+cs_data = pd.read_csv('/home/brown5628/projects/bayesian-data-analysis/data/chemical_shifts_theo_exp.csv')
+diff = cs_data.theo.values - cs_data.exp.values
+idx = pd.Categorical(cs_data['aa']).codes
+groups = len(np.unique(idx))
+
+# %%
+with pm.Model() as cs_nh:
+    μ = pm.Normal('μ', mu=0, sd=10, shape=groups)
+    σ = pm.HalfNormal('σ', sd=10, shape=groups)
+
+    y = pm.Normal('y', mu=μ[idx], sd=σ[idx], observed=diff)
+
+    trace_cs_nh = pm.sample(1000)
+
+# %%
+with pm.Model() as cs_h:
+    # hyper_priors
+    μ_μ = pm.Normal('μ_μ', mu=0, sd=10)
+    σ_μ = pm.HalfNormal('σ_μ', 10)
+
+    # priors
+    μ = pm.Normal('μ', mu=μ_μ, sd=σ_μ, shape=groups)
+    σ = pm.HalfNormal('σ', sd=10, shape=groups)
+
+    y = pm.Normal('y', mu=μ[idx], sd=σ[idx], observed=diff)
+
+    trace_cs_h = pm.sample(1000)
+
+# %%
+_, axes = az.plot_forest([trace_cs_nh, trace_cs_h],
+                         model_names=['n_h', 'h'],
+                         var_names='μ', combined=False, colors='cycle')
+y_lims = axes[0].get_ylim()
+axes[0].vlines(trace_cs_h['μ_μ'].mean(), *y_lims)
+
+
+# %%
+import graphviz
+pm.model_to_graphviz(cs_h)
+
+# %%
