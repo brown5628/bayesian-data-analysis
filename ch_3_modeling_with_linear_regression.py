@@ -324,5 +324,273 @@ with pm.Model() as model_poly:
     trace_poly = pm.sample(2000)
 
 # %%
-x_p = np.linspace(-6, 6) 
-y_p = trace_polu['α'].mean() + trace_poly['β1'].mean() * x_p + trace_poly['']
+#x_p = np.linspace(-6, 6) 
+#y_p = trace_plot['α'].mean() + trace_poly['β1'].mean() * x_p + trace_poly['']
+
+x_2 = ans[ans.group == 'II']['x'].values
+y_2 = ans[ans.group == 'II']['y'].values
+x_2 = x_2 - x_2.mean()
+
+plt.scatter(x_2, y_2)
+plt.xlabel('x')
+plt.ylabel('y', rotation = 0)
+
+
+# %%
+with pm.Model() as model_poly:
+    α = pm.Normal('α', mu = y_2.mean(), sd=1)
+    β1 = pm.Normal('β1', mu=0, sd=1)
+    β2 = pm.Normal('β2', mu=0, sd=1)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    mu = α + β1 * x_2 + β2 * x_2**2
+
+    y_pred = pm.Normal('y_pred', mu=mu, sd=ϵ, observed=y_2)
+
+    trace_poly = pm.sample(2000)
+
+# %%
+x_p = np.linspace(-6, 6)
+y_p = trace_poly['α'].mean() + trace_poly['β1'].mean() * x_p + trace_poly['β2'].mean() * x_p**2
+plt.scatter(x_2, y_2)
+plt.xlabel('x')
+plt.ylabel('y', rotation = 0)
+plt.plot(x_p, y_p, c='C1')
+
+# %%
+np.random.seed(314)
+N = 100
+alpha_real = 2.5
+beta_real = [0.9, 1.5]
+eps_real = np.random.normal(0, 0.5, size=N)
+
+X = np.array([np.random.normal(i, j, N) for i, j in zip([10, 2], [1, 1.5])]).T
+X_mean = X.mean(axis=0, keepdims=True)
+X_centered = X - X_mean
+y = alpha_real + np.dot(X, beta_real) + eps_real
+
+# %%
+def scatter_plot(x, y):
+    plt.figure(figsize=(10, 10))
+    for idx, x_i in enumerate(x.T):
+        plt.subplot(2, 2, idx+1)
+        plt.scatter(x_i, y)
+        plt.xlabel(f'x_{idx+1}')
+        plt.ylabel(f'y', rotation=0)
+
+    plt.subplot(2, 2, idx+2)
+    plt.scatter(x[:, 0], x[:, 1])
+    plt.xlabel(f'x_{idx}')
+    plt.ylabel(f'x_{idx+1}', rotation=0)
+
+scatter_plot(X_centered, y)
+
+# %%
+with pm.Model() as model_mlr:
+    α_tmp = pm.Normal('α_tmp', mu=0, sd=10)
+    β = pm.Normal('β', mu=0, sd=1, shape=2)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α_tmp + pm.math.dot(X_centered, β)
+
+    α = pm.Deterministic('α', α_tmp - pm.math.dot(X_mean, β))
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+      
+    trace_mlr = pm.sample(2000)
+
+# %%
+varnames = ['α', 'β', 'ϵ']
+az.summary(trace_mlr, var_names=varnames)
+
+# %%
+np.random.seed(42)
+N = 100
+x_1 = np.random.normal(size=N)
+x_2 = x_1 + np.random.normal(size=N, scale=1)
+y = x_1 + np.random.normal(size=N)
+X = np.vstack((x_1, x_2)).T
+
+# %%
+scatter_plot(X, y)
+
+# %%
+with pm.Model() as m_x1x2:
+    α = pm.Normal('α', mu=0, sd=10)
+    β1 = pm.Normal('β1', mu=0, sd=10)
+    β2 = pm.Normal('β2', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β1 * X[:, 0] + β2 * X[:, 1]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x1x2 = pm.sample(2000)
+
+
+with pm.Model() as m_x1:
+    α = pm.Normal('α', mu=0, sd=10)
+    β1 = pm.Normal('β1', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β1 * X[:, 0]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x1 = pm.sample(2000)
+
+with pm.Model() as m_x2:
+    α = pm.Normal('α', mu=0, sd=10)
+    β2 = pm.Normal('β2', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β2 * X[:, 1]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x2 = pm.sample(2000)
+
+
+# %%
+az.plot_forest([trace_x1x2, trace_x1, trace_x2],
+               model_names=['m_x1x2', 'm_x1', 'm_x2'],
+               var_names=['β1', 'β2'],
+               combined=False, colors='cycle', figsize=(8, 3))
+plt.savefig('B11197_03_22.png', dpi=300)
+
+# %%
+np.random.seed(42)
+N = 100
+x_1 = np.random.normal(size=N)
+x_2 = x_1 + np.random.normal(size=N, scale=0.01)
+y = x_1 + np.random.normal(size=N)
+X = np.vstack((x_1, x_2)).T
+
+# %%
+scatter_plot(X, y)
+
+# %%
+with pm.Model() as model_red:
+    α = pm.Normal('α', mu=0, sd=10)
+    β = pm.Normal('β', mu=0, sd=10, shape=2)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + pm.math.dot(X, β)
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_red = pm.sample(2000)
+
+# %%
+az.plot_forest(trace_red, var_names=['β'], combined=True, figsize=(8,2))
+
+# %%
+az.plot_pair(trace_red, var_names=['β'])
+
+# %%
+np.random.seed(42)
+N = 126
+r = 0.8
+x_1 = np.random.normal(size=N)
+x_2 = np.random.normal(x_1, scale=(1 - r ** 2) ** 0.5)
+y = np.random.normal(x_1 - x_2)
+X = np.vstack((x_1, x_2)).T
+
+# %%
+scatter_plot(X, y)
+
+# %%
+with pm.Model() as m_x1x2:
+    α = pm.Normal('α', mu=0, sd=10)
+    β1 = pm.Normal('β1', mu=0, sd=10)
+    β2 = pm.Normal('β2', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β1 * X[:, 0] + β2 * X[:, 1]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x1x2 = pm.sample(1000)
+
+
+with pm.Model() as m_x1:
+    α = pm.Normal('α', mu=0, sd=10)
+    β1 = pm.Normal('β1', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β1 * X[:, 0]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x1 = pm.sample(1000)
+
+with pm.Model() as m_x2:
+    α = pm.Normal('α', mu=0, sd=10)
+    β2 = pm.Normal('β2', mu=0, sd=10)
+    ϵ = pm.HalfCauchy('ϵ', 5)
+
+    μ = α + β2 * X[:, 1]
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=y)
+
+    trace_x2 = pm.sample(1000)
+
+# %%
+az.plot_forest([trace_x1x2, trace_x1, trace_x2],
+               model_names=['m_x1x2', 'm_x1', 'm_x2'],
+               var_names=['β1', 'β2'],
+               combined=True, colors='cycle', figsize=(8, 3))
+plt.savefig('B11197_03_27.png', dpi=300, bbox_inches='tight')
+
+# %%
+data = pd.read_csv('/home/brown5628/projects/bayesian-data-analysis/data/babies.csv')
+data.plot.scatter('Month', 'Lenght')
+
+# %%
+with pm.Model() as model_vv:
+    α = pm.Normal('α', sd=10)
+    β = pm.Normal('β', sd=10)
+    γ = pm.HalfNormal('γ', sd=10)
+    δ = pm.HalfNormal('δ', sd=10)
+
+    x_shared = shared(data.Month.values * 1.)
+
+    μ = pm.Deterministic('μ', α + β * x_shared**0.5)
+    ϵ = pm.Deterministic('ϵ', γ + δ * x_shared)
+
+    y_pred = pm.Normal('y_pred', mu=μ, sd=ϵ, observed=data.Lenght)
+
+    trace_vv = pm.sample(1000, tune=1000)
+
+# %%
+plt.plot(data.Month, data.Lenght, 'C0.', alpha=0.1)
+
+μ_m = trace_vv['μ'].mean(0)
+ϵ_m = trace_vv['ϵ'].mean(0)
+
+plt.plot(data.Month, μ_m, c='k')
+plt.fill_between(data.Month, μ_m + 1 * ϵ_m, μ_m -
+                 1 * ϵ_m, alpha=0.6, color='C1')
+plt.fill_between(data.Month, μ_m + 2 * ϵ_m, μ_m -
+                 2 * ϵ_m, alpha=0.4, color='C1')
+
+plt.xlabel('x')
+plt.ylabel('y', rotation=0)
+
+# %%
+x_shared.set_value([0.5])
+ppc = pm.sample_posterior_predictive(trace_vv, 2000, model=model_vv)
+y_ppc = ppc['y_pred'][:, 0]
+
+# %%
+ref = 47.5
+density, l, u = az._fast_kde(y_ppc)
+x_ = np.linspace(l, u, 200)
+plt.plot(x_, density)
+percentile = int(sum(y_ppc <= ref) / len(y_ppc) * 100)
+plt.fill_between(x_[x_ < ref], density[x_ < ref],
+                 label='percentile = {:2d}'.format(percentile))
+plt.xlabel('length')
+plt.yticks([])
+plt.legend()
+plt.show()
