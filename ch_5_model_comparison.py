@@ -142,3 +142,113 @@ cmp_df
 az.plot_compare(cmp_df)
 
 # %%
+w = .5
+y_lp = pm.sample_posterior_predictive_w([trace_1, trace_p], samples=1000, models=[model_1, model_p], weights=[w, 1-w])
+
+_, ax = plt.subplots(figsize=(10,6))
+az.plot_kde(y_1, plot_kwargs={'color':'C1'}, label='linear model', ax=ax)
+az.plot_kde(y_p, plot_kwargs={'color':'C2'}, label='order 2 model', ax=ax)
+az.plot_kde(y_lp['y_pred'], plot_kwargs={'color':'C3'}, label='weighted model', ax=ax)
+
+plt.plot(y_1s, np.zeroes_like(y_1s), '|', label='observed data')
+
+plt.y_ticks([])
+plt.legend()
+plt.show()
+
+# %%
+coins = 30
+heads = 9
+y_d = np.repeat([0,1], [coins-heads, heads])
+
+
+
+# %%
+with pm.Model() as model_bf:
+    p = np.array([.5, .5])
+    model_index = pm.Categorical('model_index', p=p)
+
+    m_0 = (4,8)
+    m_1 = (8,4)
+    m = pm.math.switch(pm.math.eq(model_index,0), m_0, m_1)
+
+    theta = pm.Beta('theta', m[0], m[1])
+
+    y = pm.Bernoulli('y', theta, observed=y_d)
+
+    trace_bf = pm.sample(5000)
+
+az.plot_trace(trace_bf)
+
+# %%
+pm1 = trace_bf['model_index'].mean()
+pm0 = 1 - pm1 
+bf = (pm0 / pm1) * (p[1] / p[0])
+
+# %%
+bf
+
+# %%
+with pm.Model() as model_bf_0:
+    theta = pm.Beta('theta', 4, 8)
+    y = pm.Bernoulli('y', theta, observed = y_d)
+    trace_bf_0 = pm.sample(2500, step=pm.SMC())
+
+with pm.Model() as model_bf_1:
+    theta = pm.Beta('theta', 8, 4)
+    y = pm.Bernoulli('y', theta, observed=y_d)
+    trace_bf_1 = pm.sample(2500, step=pm.SMC())
+
+model_bf_0.marginal_likelihood / model_bf_1.marginal_likelihood
+
+# %%
+traces = []
+waics = []
+for coins, heads in [(30, 9), (300, 90)]:
+    y_d = np.repeat([0,1], [coins-heads, heads])
+    for priors in [(4,8), (8,4)]:
+        with pm.Model() as model:
+            theta = pm.Beta('theta', *priors)
+            y = pm.Bernoulli('y', theta, observed=y_d)
+            trace = pm.sample(2000)
+            traces.append(trace)
+            waics.append(az.waic(trace))
+plt.show()
+# %%
+#fig, ax = plt.subplots(1,2, sharey=True)
+
+#labels = model_names
+#indices = [0, 0, 1, 1]
+#for i, (ind, d) in enumerate(zip(indices, waics)):
+#    mean = d.waic 
+#    ax[ind].errorbar(mean, -i, xerr=d.waic_se, fmt='o')
+#    ax[ind].text(mean, -i+.2, labels[i], ha='center')
+
+#ax[0].set_xlim(30, 50)
+#ax[1].set_xlim(330, 400)
+#plt.ylim([-i-.5, .5])
+#plt.yticks([])
+#plt.subplots_adjust(wspace=.5)
+#fig.text(.5, 0, 'Deviance', ha='center', fontsize=14)
+#plt.show()
+
+# %%
+np.random.seed(912)
+x = range(0, 10)
+q = stat.binom(10, .75)
+r = stat.randint(0, 10)
+
+true_distribution = [list(q.rvs(200)).count(i) / 200 for i in x]
+
+q_pmf = q.pmf(x)
+r_pmf = r.pmf(x)
+
+_, ax = plt.subplots(1, 3, figsize=(12,4), sharey=True, constrained_layout=True)
+
+for idx, (dist, label) in enumerate(zip([true_distribution, q_pmf, r_pmf], ['true_distribution', 'q', 'r'])):
+    ax[idx].vlines(x, 0, dist, label=f'entropy = {stat.entropy(dist):.2f}')
+    ax[idx].set_title(label)
+    ax[idx].set_xticks(x)
+    ax[idx].legend(loc=2, handlelength=0)
+
+# %%
