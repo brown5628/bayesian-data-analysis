@@ -346,7 +346,7 @@ az.plot_hpd(X_new[:,0], fp, color='C2')
 ax.set_xlabel('sepal_length')
 ax.set_ylabel('θ', rotation=0)
 #%%
-df_sf = pd.read_csv('../data/space_flu.csv')
+df_sf = pd.read_csv('/home/brown5628/projects/bayesian-data-analysis/data/space_flu.csv')
 age = df_sf.age.values[:, None]
 space_flu = df_sf.space_flu
 
@@ -392,3 +392,78 @@ coal_df = pd.read_csv('/home/brown5628/projects/bayesian-data-analysis/data/coal
 coal_df.head()
 
 # %%
+years = int(coal_df.max().values - coal_df.min().values)
+bins = years // 4
+hist, x_edges = np.histogram(coal_df, bins=bins)
+x_centers = x_edges[:-1] + (x_edges[1] - x_edges[0]) / 2
+x_data = x_centers[:, None]
+y_data = hist / 4
+
+# %%
+with pm.Model() as model_coal:
+    ℓ = pm.HalfNormal('ℓ', x_data.std())
+    cov = pm.gp.cov.ExpQuad(1, ls=ℓ) + pm.gp.cov.WhiteNoise(1E-5)
+    gp = pm.gp.Latent(cov_func=cov)
+    f = gp.prior('f', X=x_data) 
+
+    y_pred = pm.Poisson('y_pred', mu=pm.math.exp(f), observed=y_data)
+    trace_coal = pm.sample(1000, chains=1)
+
+# %%
+_, ax = plt.subplots(figsize=(10, 6))
+
+f_trace = np.exp(trace_coal['f'])
+rate_median = np.median(f_trace, axis=0)
+
+ax.plot(x_centers, rate_median, 'w', lw=3)
+az.plot_hpd(x_centers, f_trace)
+
+az.plot_hpd(x_centers, f_trace, credible_interval=0.5,
+            plot_kwargs={'alpha': 0})
+
+ax.plot(coal_df, np.zeros_like(coal_df)-0.5, 'k|')
+ax.set_xlabel('years')
+ax.set_ylabel('rate')
+
+# %%
+
+rw_df = pd.read_csv('/home/brown5628/projects/bayesian-data-analysis/data/redwood.csv', header=None)
+
+_, ax = plt.subplots(figsize=(8,8))
+ax.plot(rw_df[0], rw_df[1], 'C0.')
+ax.set_xlabel('x1 coordinate')
+ax.set_ylabel('x2 coordinate')
+
+
+# %%
+bins = 20 
+hist, x1_edges, x2_edges = np.histogram2d(rw_df[1].values, rw_df[0].values, bins=bins)
+x1_centers = x1_edges[:-1] + (x1_edges[1] - x1_edges[0]) /2
+x2_centers = x2_edges[:-1] + (x2_edges[1] - x2_edges[0]) /2
+x_data = [x1_centers[:, None], x2_centers[:, None]]
+y_data = hist.flatten()
+
+# %%
+with pm.Model() as model_rw:
+    ℓ = pm.HalfNormal('ℓ', rw_df.std().values, shape=2)
+    cov_func1 = pm.gp.cov.ExpQuad(1, ls=ℓ[0])
+    cov_func2 = pm.gp.cov.ExpQuad(1, ls=ℓ[1])
+
+    gp = pm.gp.LatentKron(cov_funcs = [cov_func1, cov_func2])
+    f = gp.prior('f', Xs=x_data)
+
+    y = pm.Poisson('y', mu = pm.math.exp(f), observed=y_data)
+    trace_rw = pm.sample(1000)
+
+# %%
+rate = np.exp(np.mean(trace_rw['f'], axis=0).reshape((bins, -1)))
+fig, ax = plt.subplots(figsize=(6, 6))
+ims = ax.imshow(rate, origin='lower')
+ax.grid(False)
+ticks_loc = np.linspace(0, bins-1, 6)
+ticks_lab = np.linspace(0, 1, 6).round(1)
+ax.set_xticks(ticks_loc)
+ax.set_yticks(ticks_loc)
+ax.set_xticklabels(ticks_lab)
+ax.set_yticklabels(ticks_lab)
+cbar = fig.colorbar(ims, fraction=0.046, pad=0.04)
